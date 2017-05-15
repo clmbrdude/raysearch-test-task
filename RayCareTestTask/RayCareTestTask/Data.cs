@@ -1,21 +1,36 @@
-﻿using System;
+﻿using Newtonsoft.Json;
+using Newtonsoft.Json.Converters;
+using System;
 using System.Collections.Generic;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
 
 namespace RayCareTestTask
 {
+    public enum Role
+    {
+        oncologist,
+        generalPractitioner
+    }
+    public enum Capability
+    {
+        advanced,
+        simple
+    }
+    public enum Condition
+    {
+        breastCancer,
+        headAndNeckCancer,
+        flu
+    }
     public class Machine
     {
         public string name { get; set; }
-        public string capability { get; set; }
+        public Capability capability { get; set; }
         public string id { get; set; }
     }
     public class Doctor
     {
         public string name { get; set; }
-        public List<string> roles { get; set; }
+        public List<Role> roles { get; set; }
         public string imageId { get; set; }
         public string id { get; set; }
     }
@@ -30,5 +45,21 @@ namespace RayCareTestTask
         public string treatmentMachineId { get; set; }
         public string id { get; set; }
     }
-
+    public class Patient
+    {
+        public string id { get; set; }
+        public string name { get; set; }
+        [JsonConverter(typeof(StringEnumConverter))]
+        public Condition condition { get; set; }
+        public string imageId { get; set; }
+    }
+    public class Consultation
+    {
+        public string id { get; set; }
+        public DateTime registrationDate { get; set; }
+        public string patientId { get; set; }
+        public string doctorId { get; set; }
+        public string roomId { get; set; }
+        public DateTime consultationDate { get; set; }
+    }
 }
