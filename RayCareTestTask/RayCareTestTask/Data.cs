@@ -8,7 +8,7 @@ namespace RayCareTestTask
     public enum Role
     {
         oncologist,
-        generalPractitioner
+        generalpractitioner
     }
     public enum Capability
     {
@@ -17,8 +17,8 @@ namespace RayCareTestTask
     }
     public enum Condition
     {
-        breastCancer,
-        headAndNeckCancer,
+        breastcancer,
+        headandneckcancer,
         flu
     }
     public class Machine
