@@ -309,10 +309,12 @@ namespace RayCareTestTask
             UriBuilder.Path = restRequest;
             using (var httpClient = new HttpClient())
             {
-                var response = await httpClient.GetAsync(UriBuilder.Uri);
-                response.EnsureSuccessStatusCode();
-                var content = await response.Content.ReadAsStringAsync();
-                return JsonConvert.DeserializeObject<T>(content);
+                using (var response = await httpClient.GetAsync(UriBuilder.Uri))
+                {
+                    response.EnsureSuccessStatusCode();
+                    var content = await response.Content.ReadAsStringAsync();
+                    return JsonConvert.DeserializeObject<T>(content);
+                }
             }
         }
         private static async Task<T> PostRequest<T>(string restRequest, T data)
@@ -322,11 +324,15 @@ namespace RayCareTestTask
             using (var httpClient = new HttpClient())
             {
                 var jsonString = JsonConvert.SerializeObject(data);
-                var request = new StringContent(jsonString, Encoding.UTF8, "application/json");
-                var response = await httpClient.PostAsync(UriBuilder.Uri, request);
-                response.EnsureSuccessStatusCode();
-                var content = await response.Content.ReadAsStringAsync();
-                return JsonConvert.DeserializeObject<T>(content);
+                using (var request = new StringContent(jsonString, Encoding.UTF8, "application/json"))
+                {
+                    using (var response = await httpClient.PostAsync(UriBuilder.Uri, request))
+                    {
+                        response.EnsureSuccessStatusCode();
+                        var content = await response.Content.ReadAsStringAsync();
+                        return JsonConvert.DeserializeObject<T>(content);
+                    }
+                }
             }
         }
     }

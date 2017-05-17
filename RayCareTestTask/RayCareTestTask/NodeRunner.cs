@@ -28,7 +28,7 @@ namespace RayCareTestTask
                 string exceptionMessage = "Specify path to the app.js in RayCareTestTask.dll.config file. The property is named jsFile\n" + 
                                         "E.g. <add key=\"jsFile\" value=" +
                                         @"""C: \Users\dalovenv\Documents\github\raysearch\server\node_modules\frontend_test\build\app.js""/>";
-                throw new IOException(exceptionMessage);
+                throw new FileNotFoundException(exceptionMessage);
             }
             var instance = new NodeRunner(jsFile);
             instance.StartNode();
