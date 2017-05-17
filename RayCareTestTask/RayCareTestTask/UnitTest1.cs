@@ -19,7 +19,7 @@ namespace RayCareTestTask
         [Fact]
         public async Task TestDoctor_HasUniqueId()
         {
-            using (NodeRunner.Start(ConfigurationManager.AppSettings["jsFile"]))
+            using (NodeRunner.Start())
             {
                 var doctors = await GetRequest<List<Doctor>>("doctors");
                 var numDoctors = doctors.Count;
@@ -30,7 +30,7 @@ namespace RayCareTestTask
         [Fact]
         public async Task TestDoctor_HasValidImage()
         {
-            using (NodeRunner.Start(ConfigurationManager.AppSettings["jsFile"]))
+            using (NodeRunner.Start())
             {
                 var doctors = await GetRequest<List<Doctor>>("doctors");
                 var images = await GetRequest<List<Image>>("images");
@@ -48,17 +48,30 @@ namespace RayCareTestTask
         [Fact]
         public async Task TestMachine_HasValidCapability()
         {
-            using (NodeRunner.Start(ConfigurationManager.AppSettings["jsFile"]))
+            using (NodeRunner.Start())
             {
                 var machines = await GetRequest<List<Machine>>("machines");
                 Assert.True(machines.All(m => m.capability == Capability.simple || m.capability == Capability.advanced), "All machines has valid capanility");
             }
         }
-
+        [Fact]
+        public async Task TestRoom_HasValidMachine()
+        {
+            using (NodeRunner.Start())
+            {
+                var rooms = await GetRequest<List<Room>>("rooms");
+                var machinesInRooms = rooms.Where(r => r.treatmentMachineId != null).Select(r => r.treatmentMachineId);
+                var uniqueMachineIds = machinesInRooms.Distinct();
+                var machines = await GetRequest<List<Machine>>("machines");
+                var machineIds = machines.Select(m => m.id);
+                var notValidIds = uniqueMachineIds.Except(machineIds);
+                Assert.Equal(0, notValidIds.Count());
+            }
+        }
         [Fact]
         public async Task TestImage_Add_SucceedsAndReturnsId()
         {
-            using (NodeRunner.Start(ConfigurationManager.AppSettings["jsFile"]))
+            using (NodeRunner.Start())
             {
                 var id = await AddImage();
                 Assert.NotEmpty(id);
@@ -68,7 +81,7 @@ namespace RayCareTestTask
         [Fact]
         public async Task TestPatient_AddPatient_SucceedsAndReturnsId()
         {
-            using (NodeRunner.Start(ConfigurationManager.AppSettings["jsFile"]))
+            using (NodeRunner.Start())
             {
                 var patient = new Patient
                 {
@@ -84,7 +97,7 @@ namespace RayCareTestTask
         [Fact]
         public async Task TestPatient_Add_AllPropertiesStored()
         {
-            using (NodeRunner.Start(ConfigurationManager.AppSettings["jsFile"]))
+            using (NodeRunner.Start())
             {
                 var imageId = await AddImage();
                 var patient = new Patient
@@ -105,9 +118,11 @@ namespace RayCareTestTask
         [Fact]
         public async Task TestConsultation_AddPatient_ConsultationIsCreated()
         {
-            using (NodeRunner.Start(ConfigurationManager.AppSettings["jsFile"]))
+            using (NodeRunner.Start())
             {
-                var consultation = await AddPatientGetConsultation("John Sherman", Condition.headandneckcancer);
+                var patient = await AddPatient("John Sherman", Condition.headandneckcancer);
+                var consultations = await GetConsultations();
+                var consultation = consultations.Where(c => c.patientId == patient.id).Single();
 
                 Assert.NotEmpty(consultation.id);
                 Assert.Equal(DateTime.Now.Date, consultation.registrationDate.Date);
@@ -119,7 +134,7 @@ namespace RayCareTestTask
         [Fact]
         public async Task TestConsultation_AddBreastPatient_SchedulesWithOncologist()
         {
-            using (NodeRunner.Start(ConfigurationManager.AppSettings["jsFile"]))
+            using (NodeRunner.Start())
             {
                 Consultation consultation = await AddPatientGetConsultation("Dag", Condition.breastcancer);
                 var doctors = await GetRequest<List<Doctor>>("doctors");
@@ -131,7 +146,7 @@ namespace RayCareTestTask
         [Fact]
         public async Task TestConsultation_AddBreastPatient_GetsRoomWithTreatmentMachine()
         {
-            using (NodeRunner.Start(ConfigurationManager.AppSettings["jsFile"]))
+            using (NodeRunner.Start())
             {
                 var consultation = await AddPatientGetConsultation("Dag", Condition.breastcancer);
                 var rooms = await GetRequest<List<Room>>("rooms");
@@ -143,7 +158,7 @@ namespace RayCareTestTask
         [Fact]
         public async Task TestConsultation_AddHeadAndNeckPatient_GetsRoomWithAdvancedTreatmentMachine()
         {
-            using (NodeRunner.Start(ConfigurationManager.AppSettings["jsFile"]))
+            using (NodeRunner.Start())
             {
                 var consultation = await AddPatientGetConsultation("Dag", Condition.breastcancer);
                 var rooms = await GetRequest<List<Room>>("rooms");
@@ -158,7 +173,7 @@ namespace RayCareTestTask
         [Fact]
         public async Task TestConsultation_AddFluPatient_SchedulesWithGeneralPractitioner()
         {
-            using (NodeRunner.Start(ConfigurationManager.AppSettings["jsFile"]))
+            using (NodeRunner.Start())
             {
                 var consultation = await AddPatientGetConsultation("Dag", Condition.flu);
                 var doctors = await GetRequest<List<Doctor>>("doctors");
@@ -168,12 +183,12 @@ namespace RayCareTestTask
         }
 
         [Fact]
-        public async Task TestConsultation_BookAllOncologists_NoDoubleBookingsAndCorrectDay()
+        public async Task TestConsultation_BookAllOncologists_NoDoubleBookingsAndCorrectDays()
         {
-            using (NodeRunner.Start(ConfigurationManager.AppSettings["jsFile"]))
+            using (NodeRunner.Start())
             {
                 var config = await GetConfiguration();
-                var numConsultations = config.Oncologists * 5;
+                var numConsultations = config.Oncologists * 2;
                 Assert.True(config.AdvancedMachines + config.SimpleMachines >= config.Oncologists);
                 var expectDates = new List<DateTime>();
                 foreach (var i in Enumerable.Range(0, numConsultations))
@@ -181,54 +196,78 @@ namespace RayCareTestTask
                     await AddPatient("Patient " + i, Condition.breastcancer);
                     expectDates.Add(DateTime.Now.AddDays(1 + i / config.Oncologists).Date);
                 }
-                var consultations = await GetRequest<List<Consultation>>("consultations");
-                var numUnique = consultations.Select(c => new { c.consultationDate, c.doctorId }).Distinct().Count();
+                var consultations = await GetConsultations();
+                var numUnique = consultations.Select(c => new { c.consultationDate.Date, c.doctorId }).Distinct().Count();
                 Assert.Equal(numConsultations, numUnique);
-                Assert.Equal(expectDates, consultations.Select(c => c.consultationDate).OrderBy(d => d));
+                Assert.Equal(expectDates, consultations.Select(c => c.consultationDate.Date).OrderBy(d => d));
             }
         }
 
         [Fact]
         public async Task TestConsultation_BookRooms_NoDoubleBookings()
         {
-            using (NodeRunner.Start(ConfigurationManager.AppSettings["jsFile"]))
+            using (NodeRunner.Start())
             {
                 var config = await GetConfiguration();
-                var numConsultations = (config.AdvancedMachines + config.SimpleMachines) * 2;
-                var consultations = new List<Consultation>();
+                var consultationsPerDay = Math.Min(config.AdvancedMachines, config.Oncologists);
+                var numConsultations = consultationsPerDay * 2;
+                var expectDates = new List<DateTime>();
                 foreach (var i in Enumerable.Range(0, numConsultations))
                 {
-                    consultations.Add(await AddPatientGetConsultation("Patient " + i, Condition.headandneckcancer));
+                    await AddPatient("Patient " + i, Condition.headandneckcancer);
+                    expectDates.Add(DateTime.Now.AddDays(1 + i / consultationsPerDay).Date);
                 }
-                var numUnique = consultations.Select(c => new { c.consultationDate, c.roomId }).Distinct().Count();
+                var consultations = await GetConsultations();
+                var numUnique = consultations.Select(c => new { c.consultationDate.Date, c.roomId }).Distinct().Count();
                 Assert.Equal(numConsultations, numUnique);
+                Assert.Equal(expectDates, consultations.Select(c => c.consultationDate.Date).OrderBy(d => d));
             }
         }
 
         [Fact]
         public async Task TestConsultation_AddTwoPatients_FirstConsultationStaysSame()
         {
-            using (NodeRunner.Start(ConfigurationManager.AppSettings["jsFile"]))
+            using (NodeRunner.Start())
             {
                 var initialConsultation = await AddPatientGetConsultation("First patient", Condition.flu);
                 await AddPatient("Second patient", Condition.flu);
-                var allConsultations = await GetRequest<List<Consultation>>("consultations");
+                var allConsultations = await GetConsultations();
                 Assert.Equal(initialConsultation, allConsultations.Where(c => c.id == initialConsultation.id).Single());
             }
         }
-
-//
-// Utility methods below
-//
-
-private static async Task<HospitalConfiguration>GetConfiguration()
+        [Fact]
+        public async Task TestConsultation_AddTwoFluPatientsAndTwoHeadAndNeckPatients_ConsultationCorrect()
+        {
+            using (NodeRunner.Start())
+            {
+                var config = await GetConfiguration();
+                foreach (var i in Enumerable.Range(1, config.GeneralPractitioners))
+                {
+                    await AddPatient("Flu patient " + i, Condition.flu);
+                }
+                foreach (var i in Enumerable.Range(1, config.AdvancedMachines))
+                {
+                    await AddPatient("Head and neck patient " + i, Condition.headandneckcancer);
+                }
+                var consultations = await GetConsultations();
+            }
+        }
+        //
+        // Utility methods below
+        //
+        private static async Task<List<Consultation>> GetConsultations()
+        {
+            return await GetRequest<List<Consultation>>("consultations");
+        }
+        private static async Task<HospitalConfiguration>GetConfiguration()
         {
             var machines = await GetRequest<List<Machine>>("machines");
             var rooms = await GetRequest<List<Room>>("rooms");
+            var machineCapabilities = rooms.Join(machines, r => r.treatmentMachineId, m => m.id, (r, m) => m.capability);
             var doctors = await GetRequest <List<Doctor>> ("doctors");
             return new HospitalConfiguration(
-                machines.Where(m => m.capability == Capability.advanced).Count(),
-                machines.Where(m => m.capability == Capability.simple).Count(),
+                machineCapabilities.Where(c => c == Capability.advanced).Count(),
+                machineCapabilities.Where(c => c == Capability.simple).Count(),
                 rooms.Count,
                 doctors.Count,
                 doctors.Where(d => d.roles.Any(r => r == Role.oncologist)).Count(),
@@ -238,7 +277,7 @@ private static async Task<HospitalConfiguration>GetConfiguration()
         private static async Task<Consultation> AddPatientGetConsultation(string name, Condition condition)
         {
             var patient = await AddPatient(name, condition);
-            var consultations = await GetRequest<List<Consultation>>("consultations");
+            var consultations = await GetConsultations();
             var consultation = consultations.Where(c => c.patientId == patient.id).Single();
             return consultation;
         }

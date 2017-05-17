@@ -1,6 +1,8 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Configuration;
 using System.Diagnostics;
+using System.IO;
 using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
@@ -17,8 +19,17 @@ namespace RayCareTestTask
             this._jsFile = jsFile;
         }
 
-        public static NodeRunner Start(string jsFile)
+        public static NodeRunner Start()
         {
+            var jsFile = ConfigurationManager.AppSettings["jsFile"];
+            if (! File.Exists(jsFile))
+            {
+
+                string exceptionMessage = "Specify path to the app.js in RayCareTestTask.dll.config file. The property is named jsFile\n" + 
+                                        "E.g. <add key=\"jsFile\" value=" +
+                                        @"""C: \Users\dalovenv\Documents\github\raysearch\server\node_modules\frontend_test\build\app.js""/>";
+                throw new IOException(exceptionMessage);
+            }
             var instance = new NodeRunner(jsFile);
             instance.StartNode();
             return instance;
