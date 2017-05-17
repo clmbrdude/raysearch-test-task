@@ -45,6 +45,15 @@ namespace RayCareTestTask
                 }
             }
         }
+        [Fact]
+        public async Task TestMachine_HasValidCapability()
+        {
+            using (NodeRunner.Start(ConfigurationManager.AppSettings["jsFile"]))
+            {
+                var machines = await GetRequest<List<Machine>>("machines");
+                Assert.True(machines.All(m => m.capability == Capability.simple || m.capability == Capability.advanced), "All machines has valid capanility");
+            }
+        }
 
         [Fact]
         public async Task TestImage_Add_SucceedsAndReturnsId()
@@ -94,13 +103,25 @@ namespace RayCareTestTask
         }
 
         [Fact]
-        public async Task TestConsulatation_AddBreastPatient_SchedulesWithOncologist()
+        public async Task TestConsultation_AddPatient_ConsultationIsCreated()
         {
             using (NodeRunner.Start(ConfigurationManager.AppSettings["jsFile"]))
             {
-                var patient = await AddPatient("Dag", Condition.breastcancer);
-                var consultations = await GetRequest<List<Consultation>>("consultations");
-                var consultation = consultations.Where(c => c.patientId == patient.id).Single();
+                var consultation = await AddPatientGetConsultation("John Sherman", Condition.headandneckcancer);
+
+                Assert.NotEmpty(consultation.id);
+                Assert.Equal(DateTime.Now.Date, consultation.registrationDate.Date);
+                Assert.Equal(patient.id, consultation.patientId);
+                Assert.Equal(DateTime.Now.AddDays(1).Date, consultation.consultationDate.Date);
+            }
+        }
+
+        [Fact]
+        public async Task TestConsultation_AddBreastPatient_SchedulesWithOncologist()
+        {
+            using (NodeRunner.Start(ConfigurationManager.AppSettings["jsFile"]))
+            {
+                Consultation consultation = await AddPatientGetConsultation("Dag", Condition.breastcancer);
                 var doctors = await GetRequest<List<Doctor>>("doctors");
                 var doctor = doctors.Where(d => d.id == consultation.doctorId).Single();
                 Assert.True(doctor.roles.Any(r => r == Role.oncologist), "Breast cancer patient is scheduled with oncologist");
@@ -108,13 +129,11 @@ namespace RayCareTestTask
         }
 
         [Fact]
-        public async Task TestConsulatation_AddBreastPatient_GetsRoomWithTreatmentMachine()
+        public async Task TestConsultation_AddBreastPatient_GetsRoomWithTreatmentMachine()
         {
             using (NodeRunner.Start(ConfigurationManager.AppSettings["jsFile"]))
             {
-                var patient = await AddPatient("Dag", Condition.breastcancer);
-                var consultations = await GetRequest<List<Consultation>>("consultations");
-                var consultation = consultations.Where(c => c.patientId == patient.id).Single();
+                var consultation = await AddPatientGetConsultation("Dag", Condition.breastcancer);
                 var rooms = await GetRequest<List<Room>>("rooms");
                 var room = rooms.Where(r => r.id == consultation.roomId).Single();
                 Assert.NotNull(room.treatmentMachineId);
@@ -122,13 +141,11 @@ namespace RayCareTestTask
         }
 
         [Fact]
-        public async Task TestConsulatation_AddHeadAndNeckPatient_GetsRoomWithAdvancedTreatmentMachine()
+        public async Task TestConsultation_AddHeadAndNeckPatient_GetsRoomWithAdvancedTreatmentMachine()
         {
             using (NodeRunner.Start(ConfigurationManager.AppSettings["jsFile"]))
             {
-                var patient = await AddPatient("Dag", Condition.breastcancer);
-                var consultations = await GetRequest<List<Consultation>>("consultations");
-                var consultation = consultations.Where(c => c.patientId == patient.id).Single();
+                var consultation = await AddPatientGetConsultation("Dag", Condition.breastcancer);
                 var rooms = await GetRequest<List<Room>>("rooms");
                 var room = rooms.Where(r => r.id == consultation.roomId).Single();
                 Assert.NotNull(room.treatmentMachineId);
@@ -139,22 +156,92 @@ namespace RayCareTestTask
         }
 
         [Fact]
-        public async Task TestConsulatation_AddFluPatient_SchedulesWithGeneralPractitioner()
+        public async Task TestConsultation_AddFluPatient_SchedulesWithGeneralPractitioner()
         {
             using (NodeRunner.Start(ConfigurationManager.AppSettings["jsFile"]))
             {
-                var patient = await AddPatient("Dag", Condition.flu);
-                var consultations = await GetRequest<List<Consultation>>("consultations");
-                var consultation = consultations.Where(c => c.patientId == patient.id).Single();
+                var consultation = await AddPatientGetConsultation("Dag", Condition.flu);
                 var doctors = await GetRequest<List<Doctor>>("doctors");
                 var doctor = doctors.Where(d => d.id == consultation.doctorId).Single();
                 Assert.True(doctor.roles.Any(r => r == Role.generalpractitioner), "Flu patient is scheduled with general practitioner");
             }
         }
 
-        //
-        // Utility methods below
-        //
+        [Fact]
+        public async Task TestConsultation_BookAllOncologists_NoDoubleBookingsAndCorrectDay()
+        {
+            using (NodeRunner.Start(ConfigurationManager.AppSettings["jsFile"]))
+            {
+                var config = await GetConfiguration();
+                var numConsultations = config.Oncologists * 5;
+                Assert.True(config.AdvancedMachines + config.SimpleMachines >= config.Oncologists);
+                var expectDates = new List<DateTime>();
+                foreach (var i in Enumerable.Range(0, numConsultations))
+                {
+                    await AddPatient("Patient " + i, Condition.breastcancer);
+                    expectDates.Add(DateTime.Now.AddDays(1 + i / config.Oncologists).Date);
+                }
+                var consultations = await GetRequest<List<Consultation>>("consultations");
+                var numUnique = consultations.Select(c => new { c.consultationDate, c.doctorId }).Distinct().Count();
+                Assert.Equal(numConsultations, numUnique);
+                Assert.Equal(expectDates, consultations.Select(c => c.consultationDate).OrderBy(d => d));
+            }
+        }
+
+        [Fact]
+        public async Task TestConsultation_BookRooms_NoDoubleBookings()
+        {
+            using (NodeRunner.Start(ConfigurationManager.AppSettings["jsFile"]))
+            {
+                var config = await GetConfiguration();
+                var numConsultations = (config.AdvancedMachines + config.SimpleMachines) * 2;
+                var consultations = new List<Consultation>();
+                foreach (var i in Enumerable.Range(0, numConsultations))
+                {
+                    consultations.Add(await AddPatientGetConsultation("Patient " + i, Condition.headandneckcancer));
+                }
+                var numUnique = consultations.Select(c => new { c.consultationDate, c.roomId }).Distinct().Count();
+                Assert.Equal(numConsultations, numUnique);
+            }
+        }
+
+        [Fact]
+        public async Task TestConsultation_AddTwoPatients_FirstConsultationStaysSame()
+        {
+            using (NodeRunner.Start(ConfigurationManager.AppSettings["jsFile"]))
+            {
+                var initialConsultation = await AddPatientGetConsultation("First patient", Condition.flu);
+                await AddPatient("Second patient", Condition.flu);
+                var allConsultations = await GetRequest<List<Consultation>>("consultations");
+                Assert.Equal(initialConsultation, allConsultations.Where(c => c.id == initialConsultation.id).Single());
+            }
+        }
+
+//
+// Utility methods below
+//
+
+private static async Task<HospitalConfiguration>GetConfiguration()
+        {
+            var machines = await GetRequest<List<Machine>>("machines");
+            var rooms = await GetRequest<List<Room>>("rooms");
+            var doctors = await GetRequest <List<Doctor>> ("doctors");
+            return new HospitalConfiguration(
+                machines.Where(m => m.capability == Capability.advanced).Count(),
+                machines.Where(m => m.capability == Capability.simple).Count(),
+                rooms.Count,
+                doctors.Count,
+                doctors.Where(d => d.roles.Any(r => r == Role.oncologist)).Count(),
+                doctors.Where(d => d.roles.Any(r => r == Role.generalpractitioner)).Count()
+                );
+        }
+        private static async Task<Consultation> AddPatientGetConsultation(string name, Condition condition)
+        {
+            var patient = await AddPatient(name, condition);
+            var consultations = await GetRequest<List<Consultation>>("consultations");
+            var consultation = consultations.Where(c => c.patientId == patient.id).Single();
+            return consultation;
+        }
         private static async Task<Patient> AddPatient(string name, Condition condition)
         {
             var patient = new Patient
