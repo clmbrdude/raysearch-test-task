@@ -5,18 +5,21 @@ using System.Diagnostics;
 using System.IO;
 using System.Linq;
 using System.Text;
+using System.Threading;
 using System.Threading.Tasks;
 
 namespace RayCareTestTask
 {
     class NodeRunner : IDisposable
     {
-        private Process _proc;
-        private string _jsFile;
+        private Process proc;
+        private string jsFile;
+        private bool exitOrdered = false;
+        private ManualResetEventSlim gotListeningString;
 
         public NodeRunner(string jsFile)
         {
-            this._jsFile = jsFile;
+            this.jsFile = jsFile;
         }
 
         public static NodeRunner Start()
@@ -36,20 +39,59 @@ namespace RayCareTestTask
         }
         private void StartNode()
         {
-            _proc = Process.Start("node", _jsFile);
+            gotListeningString = new ManualResetEventSlim();
+            proc = new Process();
+            proc.StartInfo.FileName = @"\program files\nodejs\node";
+            proc.StartInfo.Arguments = jsFile;
+            proc.StartInfo.UseShellExecute = false;
+            proc.StartInfo.RedirectStandardOutput = true;
+            proc.StartInfo.RedirectStandardError = true;
+            proc.EnableRaisingEvents = true;
+            proc.Exited += ProcessExitedHandler;
+            proc.OutputDataReceived += new DataReceivedEventHandler(OutputDataReceived);
+            proc.ErrorDataReceived += new DataReceivedEventHandler(OutputDataReceived);
+            proc.Start();
+            proc.BeginOutputReadLine();
+            proc.BeginErrorReadLine();
+
+            // Wait for listening string
+            if (! gotListeningString.Wait(TimeSpan.FromSeconds(3)))
+            {
+                throw new ApplicationException("Node server failed to start");
+            }
         }
 
+        private void OutputDataReceived(object sender, DataReceivedEventArgs e)
+        {
+            Debug.Print("Received {0}", e.Data);
+            if(!String.IsNullOrEmpty(e.Data) && e.Data.Contains("Server listening on port"))
+            {
+                gotListeningString.Set();
+            }
+        }
+
+        private void ProcessExitedHandler(object sender, EventArgs e)
+        {
+            if(!exitOrdered)
+            {
+                throw new ApplicationException("Node server exited (maybe another instance of node is running)");
+            }
+        }
         public void StopNode()
         {
-            _proc.Kill();
+            exitOrdered = true;
+            if (!proc.HasExited)
+            {
+                proc.Kill();
+            }
         }
         public void Dispose()
         {
-            if(_proc != null)
+            if(proc != null)
             {
                 StopNode();
-                _proc.Dispose();
-                _proc = null;
+                proc.Dispose();
+                proc = null;
             }
         }
     }
