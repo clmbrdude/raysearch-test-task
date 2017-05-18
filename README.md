@@ -4,8 +4,8 @@ Test task for RaySearch
 * Load solution in Visual Studio
 * Edit the App.config and add location of your app.js file
 * Compile
-* Run from Visual studio
-* N.B the node server is started and restarted from wihtin the tests.
+* Run from Visual studio or use the xunit.runner.console
+* N.B the node server is started and restarted from within the tests.
 
 ## Bugs
 * In consultations data; dates change from local time in the form YY-MM-DD to
