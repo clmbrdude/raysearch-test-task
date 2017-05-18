@@ -7,8 +7,8 @@ namespace RayCareTestTask
 {
     public enum Role
     {
-        oncologist,
-        generalpractitioner
+        Oncologist,
+        GeneralPractitioner
     }
     public enum Capability
     {
@@ -24,6 +24,7 @@ namespace RayCareTestTask
     public class Machine
     {
         public string name { get; set; }
+        [JsonConverter(typeof(StringEnumConverter))]
         public Capability capability { get; set; }
         public string id { get; set; }
     }

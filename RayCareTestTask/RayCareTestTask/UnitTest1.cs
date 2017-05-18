@@ -6,7 +6,6 @@ using System.Threading.Tasks;
 using Xunit;
 using System.Linq;
 using System.Text;
-using System.Configuration;
 
 namespace RayCareTestTask
 {
@@ -61,10 +60,9 @@ namespace RayCareTestTask
             {
                 var rooms = await GetRequest<List<Room>>("rooms");
                 var machinesInRooms = rooms.Where(r => r.treatmentMachineId != null).Select(r => r.treatmentMachineId);
-                var uniqueMachineIds = machinesInRooms.Distinct();
                 var machines = await GetRequest<List<Machine>>("machines");
                 var machineIds = machines.Select(m => m.id);
-                var notValidIds = uniqueMachineIds.Except(machineIds);
+                var notValidIds = machineIds.Except(machineIds);
                 Assert.Equal(0, notValidIds.Count());
             }
         }
@@ -74,6 +72,8 @@ namespace RayCareTestTask
             using (NodeRunner.Start())
             {
                 var id = await AddImage();
+                var image = await GetRequest<Image>("images", id);
+                Assert.Equal(id, image.id);
                 Assert.NotEmpty(id);
             }
         }
@@ -90,6 +90,8 @@ namespace RayCareTestTask
                     imageId = await AddImage()
                 };
                 var response = await PostRequest("patients", patient);
+                var readPatient = await GetRequest<Patient>("patients", response.id);
+                Assert.Equal(response.id, readPatient.id);
                 Assert.NotEmpty(response.id);
             }
         }
@@ -116,7 +118,7 @@ namespace RayCareTestTask
         }
 
         [Fact]
-        public async Task TestConsultation_AddPatient_ConsultationIsCreated()
+        public async Task TestConsultation_AddPatient_ConsultationIsCreatedForNextDay()
         {
             using (NodeRunner.Start())
             {
@@ -136,10 +138,21 @@ namespace RayCareTestTask
         {
             using (NodeRunner.Start())
             {
-                Consultation consultation = await AddPatientGetConsultation("Dag", Condition.breastcancer);
+                var consultation = await AddPatientGetConsultation("Dag", Condition.breastcancer);
                 var doctors = await GetRequest<List<Doctor>>("doctors");
                 var doctor = doctors.Where(d => d.id == consultation.doctorId).Single();
-                Assert.True(doctor.roles.Any(r => r == Role.oncologist), "Breast cancer patient is scheduled with oncologist");
+                Assert.True(doctor.roles.Any(r => r == Role.Oncologist), "Breast cancer patient is scheduled with oncologist");
+            }
+        }
+        [Fact]
+        public async Task TestConsultation_AddHeadAndNeckPatient_SchedulesWithOncologist()
+        {
+            using (NodeRunner.Start())
+            {
+                var consultation = await AddPatientGetConsultation("Dag", Condition.headandneckcancer);
+                var doctors = await GetRequest<List<Doctor>>("doctors");
+                var doctor = doctors.Where(d => d.id == consultation.doctorId).Single();
+                Assert.True(doctor.roles.Any(r => r == Role.Oncologist), "Head and neck cancer patient is scheduled with oncologist");
             }
         }
 
@@ -178,7 +191,7 @@ namespace RayCareTestTask
                 var consultation = await AddPatientGetConsultation("Dag", Condition.flu);
                 var doctors = await GetRequest<List<Doctor>>("doctors");
                 var doctor = doctors.Where(d => d.id == consultation.doctorId).Single();
-                Assert.True(doctor.roles.Any(r => r == Role.generalpractitioner), "Flu patient is scheduled with general practitioner");
+                Assert.True(doctor.roles.Any(r => r == Role.GeneralPractitioner), "Flu patient is scheduled with general practitioner");
             }
         }
 
@@ -204,7 +217,7 @@ namespace RayCareTestTask
         }
 
         [Fact]
-        public async Task TestConsultation_BookRooms_NoDoubleBookings()
+        public async Task TestConsultation_BookRooms_NoDoubleBookingsAndCorrectDays()
         {
             using (NodeRunner.Start())
             {
@@ -236,7 +249,7 @@ namespace RayCareTestTask
             }
         }
         [Fact]
-        public async Task TestConsultation_AddTwoFluPatientsAndTwoHeadAndNeckPatients_ConsultationCorrect()
+        public async Task TestConsultation_AddTwoFluPatientsAndTwoHeadAndNeckPatients_DontCrash()
         {
             using (NodeRunner.Start())
             {
@@ -252,6 +265,24 @@ namespace RayCareTestTask
                 var consultations = await GetConsultations();
             }
         }
+        [Fact]
+        public async Task TestConsultation_AddTwoFluPatientsAndTwoBreastPatients_DontCrash()
+        {
+            using (NodeRunner.Start())
+            {
+                var config = await GetConfiguration();
+                foreach (var i in Enumerable.Range(1, config.GeneralPractitioners))
+                {
+                    await AddPatient("Flu patient " + i, Condition.flu);
+                }
+                foreach (var i in Enumerable.Range(1, config.AdvancedMachines))
+                {
+                    await AddPatient("Head and neck patient " + i, Condition.breastcancer);
+                }
+                Assert.True(true);
+            }
+        }
+
         //
         // Utility methods below
         //
@@ -270,8 +301,8 @@ namespace RayCareTestTask
                 machineCapabilities.Where(c => c == Capability.simple).Count(),
                 rooms.Count,
                 doctors.Count,
-                doctors.Where(d => d.roles.Any(r => r == Role.oncologist)).Count(),
-                doctors.Where(d => d.roles.Any(r => r == Role.generalpractitioner)).Count()
+                doctors.Where(d => d.roles.Any(r => r == Role.Oncologist)).Count(),
+                doctors.Where(d => d.roles.Any(r => r == Role.GeneralPractitioner)).Count()
                 );
         }
         private static async Task<Consultation> AddPatientGetConsultation(string name, Condition condition)
