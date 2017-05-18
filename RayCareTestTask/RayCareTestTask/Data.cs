@@ -30,6 +30,7 @@ namespace RayCareTestTask
     public class Doctor
     {
         public string name { get; set; }
+        [JsonProperty(ItemConverterType = typeof(StringEnumConverter))]
         public List<Role> roles { get; set; }
         public string imageId { get; set; }
         public string id { get; set; }
