@@ -6,6 +6,11 @@ using System.Threading.Tasks;
 using Xunit;
 using System.Linq;
 using System.Text;
+using System.Configuration;
+using Newtonsoft.Json.Schema;
+using Newtonsoft.Json.Schema.Generation;
+using Newtonsoft.Json.Linq;
+using System.Diagnostics;
 
 namespace RayCareTestTask
 {
@@ -41,6 +46,27 @@ namespace RayCareTestTask
                         var response = await httpClient.GetAsync(uri);
                         Assert.True(response.IsSuccessStatusCode, string.Format("{0} is a valid URI", uri));
                     }
+                }
+            }
+        }
+        [Fact]
+        public async Task TestDoctor_HasValidSchema()
+        {
+            using (NodeRunner.Start())
+            {
+                var doctors = await GetRequest<List<Doctor>>("doctors");
+                Assert.True(await ValidateResponse<Doctor>("doctors", doctors.First().id), "Doctor has valid schema");
+            }
+        }
+        public async Task TestDoctor_AddPatient_AllDoctorsHasValidSchema()
+        {
+            using (NodeRunner.Start())
+            {
+                await AddPatient("John Gill", Condition.flu);
+                var doctors = await GetRequest<List<Doctor>>("doctors");
+                foreach (var doctor in doctors)
+                {
+                    Assert.True(await ValidateResponse<Doctor>("doctors", doctors.First().id), "Doctor has valid schema");
                 }
             }
         }
@@ -132,7 +158,28 @@ namespace RayCareTestTask
                 Assert.Equal(DateTime.Now.AddDays(1).Date, consultation.consultationDate.Date);
             }
         }
-
+        [Fact]
+        public async Task TestConsultation_AddTwoPatients_FirstConsultationStaysSame()
+        {
+            using (NodeRunner.Start())
+            {
+                var initialConsultation = await AddPatientGetConsultation("First patient", Condition.flu);
+                await AddPatient("Second patient", Condition.flu);
+                var allConsultations = await GetConsultations();
+                Assert.Equal(initialConsultation, allConsultations.Where(c => c.id == initialConsultation.id).Single());
+            }
+        }
+        [Fact]
+        public async Task TestConsultation_AddTwoPatients_DatesAreConsistent()
+        {
+            using (NodeRunner.Start())
+            {
+                var initialConsultation = await AddPatientGetConsultation("First patient", Condition.flu);
+                await AddPatient("Second patient", Condition.flu);
+                var allConsultations = await GetConsultations();
+                Assert.Equal(initialConsultation, allConsultations.Where(c => c.id == initialConsultation.id).Single());
+            }
+        }
         [Fact]
         public async Task TestConsultation_AddBreastPatient_SchedulesWithOncologist()
         {
@@ -236,18 +283,6 @@ namespace RayCareTestTask
                 Assert.Equal(expectDates, consultations.Select(c => c.consultationDate.Date).OrderBy(d => d));
             }
         }
-
-        [Fact]
-        public async Task TestConsultation_AddTwoPatients_FirstConsultationStaysSame()
-        {
-            using (NodeRunner.Start())
-            {
-                var initialConsultation = await AddPatientGetConsultation("First patient", Condition.flu);
-                await AddPatient("Second patient", Condition.flu);
-                var allConsultations = await GetConsultations();
-                Assert.Equal(initialConsultation, allConsultations.Where(c => c.id == initialConsultation.id).Single());
-            }
-        }
         [Fact]
         public async Task TestConsultation_AddTwoFluPatientsAndTwoHeadAndNeckPatients_DontCrash()
         {
@@ -333,7 +368,7 @@ namespace RayCareTestTask
         }
         private static async Task<T> GetRequest<T>(string restRequest, string id = null)
         {
-            if(id != null)
+            if (id != null)
             {
                 restRequest += "/" + id;
             }
@@ -345,6 +380,28 @@ namespace RayCareTestTask
                     response.EnsureSuccessStatusCode();
                     var content = await response.Content.ReadAsStringAsync();
                     return JsonConvert.DeserializeObject<T>(content);
+                }
+            }
+        }
+        private static async Task<bool> ValidateResponse<T>(string restRequest, string id)
+        {
+            restRequest += "/" + id;
+            UriBuilder.Path = restRequest;
+
+            var schemaGenerator = new JSchemaGenerator();
+            var schema = schemaGenerator.Generate(typeof(T));
+
+            using (var httpClient = new HttpClient())
+            {
+                using (var response = await httpClient.GetAsync(UriBuilder.Uri))
+                {
+                    response.EnsureSuccessStatusCode();
+                    var content = await response.Content.ReadAsStringAsync();
+                    var obj = JObject.Parse(content);
+                    IList<ValidationError> errors;
+                    var r =obj.IsValid(schema, out errors);
+                    Debug.Print(errors.ToString());
+                    return r;
                 }
             }
         }
