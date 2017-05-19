@@ -10,7 +10,7 @@ Test task for RaySearch
 ## Bugs
 * In consultations data; dates change from unspecified timezone in the form YY-MM-DD to
 UTC in the form YY-MM-DD:hhmmss.uuuZ hence when truncating to a date the consultation appears to 
-be scheduled one day too soon. This results in three faling test cases
+be scheduled one day too soon. This results in three failing test cases
 * The server crashes in a specific scenario
 
 ## Observations

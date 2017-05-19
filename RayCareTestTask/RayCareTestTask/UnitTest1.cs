@@ -6,11 +6,9 @@ using System.Threading.Tasks;
 using Xunit;
 using System.Linq;
 using System.Text;
-using System.Configuration;
 using Newtonsoft.Json.Schema;
 using Newtonsoft.Json.Schema.Generation;
 using Newtonsoft.Json.Linq;
-using System.Diagnostics;
 
 namespace RayCareTestTask
 {
@@ -20,6 +18,7 @@ namespace RayCareTestTask
         private const string PATIENT_IMG_URL = "https://www.shutterstock.com/image-photo/senior-patient-having-consultation-doctor-office-317554598?src=sIRXfoOz58oVBMY0JCMAZQ-1-4";
         private static UriBuilder UriBuilder = new UriBuilder(BASE_URL);
 
+        #region Doctor
         [Fact]
         public async Task TestDoctor_HasUniqueId()
         {
@@ -73,6 +72,8 @@ namespace RayCareTestTask
                 }
             }
         }
+        #endregion
+        #region Machine
         [Fact]
         public async Task TestMachine_HasValidSchema()
         {
@@ -86,6 +87,8 @@ namespace RayCareTestTask
                 }
             }
         }
+        #endregion
+        #region Room
         [Fact]
         public async Task TestRoom_HasValidMachine()
         {
@@ -99,6 +102,8 @@ namespace RayCareTestTask
                 Assert.Equal(0, notValidIds.Count());
             }
         }
+        #endregion
+        #region Image
         [Fact]
         public async Task TestImage_Add_SucceedsAndReturnsId()
         {
@@ -110,7 +115,8 @@ namespace RayCareTestTask
                 Assert.NotEmpty(id);
             }
         }
-
+        #endregion
+        #region Patient
         [Fact]
         public async Task TestPatient_AddPatient_SucceedsAndReturnsId()
         {
@@ -149,7 +155,8 @@ namespace RayCareTestTask
                 Assert.Equal(Condition.flu, storedPatient.condition);
             }
         }
-
+        #endregion
+        #region Consultation
         [Fact]
         public async Task TestConsultation_AddPatient_ConsultationHasValidSchema()
         {
@@ -323,7 +330,8 @@ namespace RayCareTestTask
                 Assert.True(true);
             }
         }
-
+        #endregion
+        #region Utilities
         //
         // Utility methods below
         //
@@ -432,5 +440,7 @@ namespace RayCareTestTask
                 }
             }
         }
+        #endregion
+
     }
 }
