@@ -32,6 +32,30 @@ namespace RayCareTestTask
             }
         }
         [Fact]
+        public async Task TestDoctor_HasValidSchema()
+        {
+            using (NodeRunner.Start())
+            {
+                var doctors = await GetRequest<List<Doctor>>("doctors");
+                var errorString = await ValidateResponse<Doctor>("doctors", doctors.First().id);
+                Assert.True(errorString == null, errorString);
+            }
+        }
+        [Fact]
+        public async Task TestDoctor_AddPatient_AllDoctorsHasValidSchema()
+        {
+            using (NodeRunner.Start())
+            {
+                await AddPatient("John Gill", Condition.headandneckcancer);
+                var doctors = await GetRequest<List<Doctor>>("doctors");
+                foreach (var doctor in doctors)
+                {
+                    var errorString = await ValidateResponse<Doctor>("doctors", doctor.id);
+                    Assert.True(errorString == null, errorString);
+                }
+            }
+        }
+        [Fact]
         public async Task TestDoctor_HasValidImage()
         {
             using (NodeRunner.Start())
@@ -50,33 +74,16 @@ namespace RayCareTestTask
             }
         }
         [Fact]
-        public async Task TestDoctor_HasValidSchema()
-        {
-            using (NodeRunner.Start())
-            {
-                var doctors = await GetRequest<List<Doctor>>("doctors");
-                Assert.True(await ValidateResponse<Doctor>("doctors", doctors.First().id), "Doctor has valid schema");
-            }
-        }
-        public async Task TestDoctor_AddPatient_AllDoctorsHasValidSchema()
-        {
-            using (NodeRunner.Start())
-            {
-                await AddPatient("John Gill", Condition.flu);
-                var doctors = await GetRequest<List<Doctor>>("doctors");
-                foreach (var doctor in doctors)
-                {
-                    Assert.True(await ValidateResponse<Doctor>("doctors", doctors.First().id), "Doctor has valid schema");
-                }
-            }
-        }
-        [Fact]
-        public async Task TestMachine_HasValidCapability()
+        public async Task TestMachine_HasValidSchema()
         {
             using (NodeRunner.Start())
             {
                 var machines = await GetRequest<List<Machine>>("machines");
-                Assert.True(machines.All(m => m.capability == Capability.simple || m.capability == Capability.advanced), "All machines has valid capanility");
+                foreach (var machine in machines)
+                {
+                    var errorString = await ValidateResponse<Machine>("machines", machine.id);
+                    Assert.True(errorString == null, errorString);
+                }
             }
         }
         [Fact]
@@ -144,6 +151,16 @@ namespace RayCareTestTask
         }
 
         [Fact]
+        public async Task TestConsultation_AddPatient_ConsultationHasValidSchema()
+        {
+            using (NodeRunner.Start())
+            {
+                var consultation = await AddPatientGetConsultation("Lynn Hill", Condition.flu);
+                var errorString = await ValidateResponse<Consultation>("consultations", consultation.id);
+                Assert.True(errorString == null, errorString);
+            }
+        }
+        [Fact]
         public async Task TestConsultation_AddPatient_ConsultationIsCreatedForNextDay()
         {
             using (NodeRunner.Start())
@@ -160,17 +177,6 @@ namespace RayCareTestTask
         }
         [Fact]
         public async Task TestConsultation_AddTwoPatients_FirstConsultationStaysSame()
-        {
-            using (NodeRunner.Start())
-            {
-                var initialConsultation = await AddPatientGetConsultation("First patient", Condition.flu);
-                await AddPatient("Second patient", Condition.flu);
-                var allConsultations = await GetConsultations();
-                Assert.Equal(initialConsultation, allConsultations.Where(c => c.id == initialConsultation.id).Single());
-            }
-        }
-        [Fact]
-        public async Task TestConsultation_AddTwoPatients_DatesAreConsistent()
         {
             using (NodeRunner.Start())
             {
@@ -383,14 +389,15 @@ namespace RayCareTestTask
                 }
             }
         }
-        private static async Task<bool> ValidateResponse<T>(string restRequest, string id)
+        private static async Task<string> ValidateResponse<T>(string restRequest, string id)
         {
             restRequest += "/" + id;
             UriBuilder.Path = restRequest;
 
             var schemaGenerator = new JSchemaGenerator();
+            schemaGenerator.GenerationProviders.Add(new StringEnumGenerationProvider());
             var schema = schemaGenerator.Generate(typeof(T));
-
+            
             using (var httpClient = new HttpClient())
             {
                 using (var response = await httpClient.GetAsync(UriBuilder.Uri))
@@ -399,9 +406,11 @@ namespace RayCareTestTask
                     var content = await response.Content.ReadAsStringAsync();
                     var obj = JObject.Parse(content);
                     IList<ValidationError> errors;
-                    var r =obj.IsValid(schema, out errors);
-                    Debug.Print(errors.ToString());
-                    return r;
+                    if (!obj.IsValid(schema, out errors))
+                    {
+                        return errors.Select(e => string.Format("{0}, value is {1}",e.Message, e.Value)).Aggregate((buf, next) => buf + "\n" + next);
+                    }
+                    return null;
                 }
             }
         }
