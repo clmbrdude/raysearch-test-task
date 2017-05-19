@@ -22,12 +22,13 @@ be scheduled one day too soon. This results in three failing test cases
 * Add patients from multiple threads and check consistency
 * Verify JSON schema for all responses.
 * Test load limit (e.g. number of requests per second)
-* Maybe add tests that tests random permutations of requests, e.g. model bases tests.
+* Maybe add tests that tests random permutations of requests, e.g. model based tests.
 * More exploratory testing
 
 ## Lession learned
 * When developing tests, always read the app state as last step and verify consistency. I missed a problem where 
 consultation data for patient1 changed after patient2 was added. Since I was only checking patient1's data immediately after adding 
 the patient this was initially missed.
-* Sadly enough finding bugs only from automation (e.g. the crash bug) is **really** hard, exploratory or more exhaustive automated testing is needed.
+* Sadly enough finding bugs only from automation (e.g. the crash bug) is **really** hard, exploratory or more exhaustive automated testing is needed, 
+e.g. model based tests.
 * Async methods propagates through all code. 
